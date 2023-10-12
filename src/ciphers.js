@@ -1,7 +1,8 @@
+import S3 from 'aws-sdk/clients/s3';
 import * as utils from './lib/api_utils';
 import { loadContextFromHeader, buildCipherDocument, touch } from './lib/bitwarden';
 import { mapCipher } from './lib/mappers';
-import { Cipher } from './lib/models';
+import { Cipher, Attachment } from './lib/models';
 
 export const postHandler = async (event, context, callback) => {
   console.log('Cipher create handler triggered', JSON.stringify(event, null, 2));
@@ -31,7 +32,7 @@ export const postHandler = async (event, context, callback) => {
 
     await touch(user);
 
-    callback(null, utils.okResponse({ ...mapCipher(cipher), Edit: true }));
+    callback(null, utils.okResponse({ ...await mapCipher(cipher), Edit: true }));
   } catch (e) {
     callback(null, utils.serverError('Server error saving vault item', e));
   }
@@ -77,7 +78,7 @@ export const putHandler = async (event, context, callback) => {
     cipher = await cipher.updateAsync();
     await touch(user);
 
-    callback(null, utils.okResponse({ ...mapCipher(cipher), Edit: true }));
+    callback(null, utils.okResponse({ ...await mapCipher(cipher), Edit: true }));
   } catch (e) {
     callback(null, utils.serverError('Server error saving vault item', e));
   }
@@ -93,17 +94,51 @@ export const deleteHandler = async (event, context, callback) => {
     callback(null, utils.validationError('User not found: ' + e.message));
   }
 
-  const cipherUuid = event.pathParameters.uuid;
-  if (!cipherUuid) {
-    callback(null, utils.validationError('Missing vault item ID'));
+  let cipherUuids;
+  if (event.pathParameters) {
+    cipherUuids = [event.pathParameters.uuid];
+  } else if (event.body) {
+    const body = utils.normalizeBody(JSON.parse(event.body));
+    cipherUuids = body.ids;
+  } else {
+    callback(null, utils.validationError('Missing vault id/s'));
+    return;
+  }
+  if (!cipherUuids || cipherUuids.every(elem => (elem === undefined || elem === ''))) {
+    callback(null, utils.validationError('Missing vault id/s'));
+    return;
   }
 
-  try {
-    await Cipher.destroyAsync(user.get('uuid'), cipherUuid);
-    await touch(user);
+  cipherUuids.forEach(async (cipherUuid) => {
+    try {
+      // Remove attachments. First retrieve associated attachments to the cipher.
+      const attachments = (await Attachment.query(cipherUuid).execAsync()).Items;
+      attachments.forEach(async (attachment) => {
+        // Remove it from S3 bucket
+        const params = {
+          Bucket: process.env.ATTACHMENTS_BUCKET,
+          Key: cipherUuid + '/' + attachment.get('uuid'),
+        };
 
-    callback(null, utils.okResponse(''));
-  } catch (e) {
-    callback(null, utils.validationError(e.toString()));
-  }
+        const s3 = new S3();
+        await new Promise((resolve, reject) => s3.deleteObject(params, (err, data) => {
+          if (err) {
+            reject(err);
+            return;
+          }
+          resolve(data);
+        }));
+
+        // Remove it from table attachments
+        Attachment.destroyAsync(cipherUuid, attachment.get('uuid'));
+      });
+
+      // Remove cipher from table ciphers
+      await Cipher.destroyAsync(user.get('uuid'), cipherUuid);
+      await touch(user);
+    } catch (e) {
+      callback(null, utils.validationError(e.toString()));
+    }
+  });
+  callback(null, utils.okResponse(''));
 };

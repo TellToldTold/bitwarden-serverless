@@ -54,13 +54,14 @@ describe("Cipher API", function () {
   });
 
   it('should return error on delete without authorization header', function() {
-    return chakram.delete(process.env.API_URL + "/api/ciphers/uuid").then(function (response) {
+    return chakram.put(process.env.API_URL + "/api/ciphers/uuid/delete").then(function (response) {
       expect(response).to.have.status(400);
     });
   });
 
   describe('cipher manipulation', function() {
     var cipherId;
+    var cipherIds = [];
     var revisionDate;
 
     step('allows create', function() {
@@ -114,9 +115,30 @@ describe("Cipher API", function () {
     });
 
     step('allows delete', function() {
-      return chakram.delete(
-        process.env.API_URL + "/api/ciphers/" + cipherId,
+      return chakram.put(
+        process.env.API_URL + "/api/ciphers/" + cipherId + "/delete",
         null,
+        { headers: { Authorization: 'Bearer ' + accessToken } }
+      ).then(function(response) {
+        expect(response).to.have.status(200);
+      });
+    });
+
+    step('allows delete multiple', async () => {
+      var cipherBody = getCipherBody();
+      for(var i = 0; i<3; i++) {
+        await chakram.post(
+          process.env.API_URL + "/api/ciphers",
+          cipherBody,
+          { headers: { Authorization: 'Bearer ' + accessToken } }
+        ).then(function(response) {
+          cipherIds.push(response.body.Id);
+        });
+      }
+
+      return chakram.put(
+        process.env.API_URL + "/api/ciphers/delete",
+        {"ids": cipherIds},
         { headers: { Authorization: 'Bearer ' + accessToken } }
       ).then(function(response) {
         expect(response).to.have.status(200);

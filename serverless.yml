@@ -8,6 +8,10 @@ custom:
     prod: Retain
     other: Delete
 
+  apigwBinary:
+    types:
+      - 'multipart/form-data'
+    
   default_cors: &default_cors
     cors:
       origin: "*"
@@ -19,16 +23,16 @@ custom:
         - Device-type
         - Pragma
         - Cache-Control
-      allowMethods: "GET, POST, OPTIONS, PUT, DELETE"
 
 plugins:
   - serverless-webpack
   - serverless-offline
+  - serverless-apigw-binary
 
 provider:
   name: aws
   stage: ${opt:stage, 'prod'}
-  runtime: nodejs10.x
+  runtime: nodejs14.x
   memorySize: 256
   timeout: 10
   logs:
@@ -38,27 +42,41 @@ provider:
     USERS_TABLE: ${self:service}-${self:provider.stage}-users
     CIPHERS_TABLE: ${self:service}-${self:provider.stage}-ciphers
     FOLDERS_TABLE: ${self:service}-${self:provider.stage}-folders
-  iamRoleStatements:
-    - Effect: Allow
-      Action:
-        - dynamodb:Query
-        - dynamodb:Scan
-        - dynamodb:GetItem
-        - dynamodb:PutItem
-        - dynamodb:UpdateItem
-        - dynamodb:DeleteItem
-      Resource:
-        - "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:provider.environment.DEVICES_TABLE}"
-        - "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:provider.environment.USERS_TABLE}"
-        - "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:provider.environment.CIPHERS_TABLE}"
-        - "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:provider.environment.FOLDERS_TABLE}"
-  usagePlan:
-    throttle:
-      burstLimit: 300 # request burst
-      rateLimit: 5 # requests per second
-
-
-
+    ATTACHMENTS_TABLE: ${self:service}-${self:provider.stage}-attachments
+    SENDS_TABLE: ${self:service}-${self:provider.stage}-sends
+    ATTACHMENTS_BUCKET: ${self:service}-${self:provider.stage}-storage-v2
+  iam:
+    role:
+      statements:
+        - Effect: 'Allow'
+          Action:
+            - 's3:GetObject'
+            - 's3:GetObjectAcl'
+            - 's3:PutObject'
+            - 's3:PutObjectAcl'
+            - 's3:DeleteObject'
+          Resource:
+            - "arn:aws:s3:::${self:provider.environment.ATTACHMENTS_BUCKET}/*"
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+          Resource:
+            - "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:provider.environment.DEVICES_TABLE}"
+            - "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:provider.environment.USERS_TABLE}"
+            - "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:provider.environment.CIPHERS_TABLE}"
+            - "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:provider.environment.FOLDERS_TABLE}"
+            - "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:provider.environment.ATTACHMENTS_TABLE}"
+  apiGateway: 
+    usagePlan:
+      throttle:
+        burstLimit: 300 # request burst
+        rateLimit: 5 # requests per second
+      
 functions:
   # Identity endpoints
 
@@ -70,8 +88,6 @@ functions:
           <<: *default_cors
           path: identity/connect/token
 
-  # Accounts endpoints
-
   prelogin:
     handler: src/prelogin.handler
     events:
@@ -79,6 +95,27 @@ functions:
           method: post
           <<: *default_cors
           path: api/accounts/prelogin
+      - http:
+          method: post
+          <<: *default_cors
+          path: identity/accounts/prelogin
+
+  register:
+    handler: src/register.handler
+    environment:
+      DISABLE_USER_REGISTRATION: ${env:DISABLE_USER_REGISTRATION, 'false'}
+    events:
+      - http:
+          method: post
+          <<: *default_cors
+          path: api/accounts/register
+      - http:
+          method: post
+          <<: *default_cors
+          path: identity/accounts/register
+          
+# Accounts endpoints
+
   profile:
     handler: src/accounts.profileHandler
     events:
@@ -100,15 +137,7 @@ functions:
           method: post
           <<: *default_cors
           path: api/accounts/keys
-  register:
-    handler: src/register.handler
-    environment:
-      DISABLE_USER_REGISTRATION: ${env:DISABLE_USER_REGISTRATION, 'false'}
-    events:
-      - http:
-          method: post
-          <<: *default_cors
-          path: api/accounts/register
+  
   accounts_revision_date:
     handler: src/accounts.revisionDateHandler
     events:
@@ -151,9 +180,30 @@ functions:
     handler: src/ciphers.deleteHandler
     events:
       - http:
+          method: put
+          <<: *default_cors
+          path: api/ciphers/{uuid}/delete
+  cipher_delete_many:
+    handler: src/ciphers.deleteHandler
+    events:
+      - http:
+          method: put
+          <<: *default_cors
+          path: api/ciphers/delete
+  cipher_attachment_post:
+    handler: src/attachments.postHandler
+    events:
+      - http:
+          method: post
+          <<: *default_cors
+          path: api/ciphers/{uuid}/attachment
+  cipher_attachment_delete:
+    handler: src/attachments.deleteHandler
+    events:
+      - http:
           method: delete
           <<: *default_cors
-          path: api/ciphers/{uuid}
+          path: api/ciphers/{uuid}/attachment/{attachmentId}
   folder_post:
     handler: src/folders.postHandler
     events:
@@ -205,10 +255,20 @@ functions:
           <<: *default_cors
           path: /{fallback+}
 
-
-
 resources:
   Resources:
+    AttachmentsBucket:
+      Type: AWS::S3::Bucket
+      DeletionPolicy: ${self:custom.tableDeletionPolicy.${self:provider.stage}, self:custom.tableDeletionPolicy.other}
+      Properties:
+        VersioningConfiguration:
+          Status: Enabled
+        BucketEncryption:
+          ServerSideEncryptionConfiguration:
+            - ServerSideEncryptionByDefault:
+                SSEAlgorithm: aws:kms
+        BucketName: ${self:provider.environment.ATTACHMENTS_BUCKET}
+
     UsersTable:
       Type: AWS::DynamoDB::Table
       DeletionPolicy: ${self:custom.tableDeletionPolicy.${self:provider.stage}, self:custom.tableDeletionPolicy.other}
@@ -273,6 +333,27 @@ resources:
             AttributeType: S
         KeySchema:
           - AttributeName: userUuid
+            KeyType: HASH
+          - AttributeName: uuid
+            KeyType: RANGE
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+
+    AttachmentsTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: ${self:custom.tableDeletionPolicy.${self:provider.stage}, self:custom.tableDeletionPolicy.other}
+      Properties:
+        TableName: ${self:provider.environment.ATTACHMENTS_TABLE}
+        AttributeDefinitions:
+          - AttributeName: cipherUuid
+            AttributeType: S
+          - AttributeName: uuid
+            AttributeType: S
+        KeySchema:
+          - AttributeName: cipherUuid
             KeyType: HASH
           - AttributeName: uuid
             KeyType: RANGE
