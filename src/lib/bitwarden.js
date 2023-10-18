@@ -3,9 +3,7 @@ import crypto from 'crypto';
 import bufferEq from 'buffer-equal-constant-time';
 import entries from 'object.entries';
 import mapKeys from 'lodash/mapKeys';
-import {
-  User, Device, CIPHER_MODEL_VERSION, USER_MODEL_VERSION,
-} from './models';
+import { CIPHER_MODEL_VERSION, getDevice, getUser, USER_MODEL_VERSION } from './models';
 import { KDF_PBKDF2_ITERATIONS_DEFAULT } from './crypto';
 
 const JWT_DEFAULT_ALGORITHM = 'HS256';
@@ -26,17 +24,17 @@ export async function loadContextFromHeader(header) {
   const payload = jwt.decode(token);
   const userUuid = payload.sub;
   const deviceUuid = payload.device;
-  const user = await User.getAsync(userUuid);
-  const device = await Device.getAsync(deviceUuid);
+  const user = await getUser(userUuid);
+  const device = await getDevice(deviceUuid);
 
   if (!user || !device) {
     throw new Error('User or device not found from token');
   }
 
   // Throws on error
-  jwt.verify(token, user.get('jwtSecret'), { algorithms: [JWT_DEFAULT_ALGORITHM] });
+  jwt.verify(token, user.jwtSecret, { algorithms: [JWT_DEFAULT_ALGORITHM] });
 
-  if (payload.sstamp !== user.get('securityStamp')) {
+  if (payload.sstamp !== user.securityStamp) {
     throw new Error('You need to login again after recent profile changes');
   }
 
@@ -52,10 +50,10 @@ export function regenerateTokens(user, device) {
 
   const tokens = {
     tokenExpiresAt: expiryDate,
-    refreshToken: device.get('refreshToken'),
+    refreshToken: device.refreshToken,
   };
 
-  if (!device.get('refreshToken')) {
+  if (!device.refreshToken) {
     tokens.refreshToken = generateToken();
   }
 
@@ -63,18 +61,18 @@ export function regenerateTokens(user, device) {
     nbf: Math.floor(notBeforeDate.getTime() / 1000),
     exp: Math.floor(expiryDate.getTime() / 1000),
     iss: '/identity',
-    sub: user.get('uuid'),
-    premium: user.get('premium'),
-    name: user.get('name'),
-    email: user.get('email'),
-    email_verified: user.get('emailVerified'),
-    sstamp: user.get('securityStamp'),
-    device: device.get('uuid'),
+    sub: user.uuid,
+    premium: user.premium,
+    name: user.name,
+    email: user.email,
+    email_verified: user.emailVerified,
+    sstamp: user.securityStamp,
+    device: device.uuid,
     scope: ['api', 'offline_access'],
     amr: ['Application'],
   };
 
-  tokens.accessToken = jwt.sign(payload, user.get('jwtSecret'), { algorithm: JWT_DEFAULT_ALGORITHM });
+  tokens.accessToken = jwt.sign(payload, user.jwtSecret, { algorithm: JWT_DEFAULT_ALGORITHM });
 
   return tokens;
 }
@@ -85,7 +83,7 @@ export function hashesMatch(hashA, hashB) {
 
 export function buildCipherDocument(body, user) {
   const params = {
-    userUuid: user.get('uuid'),
+    userUuid: user.uuid,
     organizationUuid: body.organizationid,
     folderUuid: body.folderid,
     favorite: !!body.favorite,
@@ -154,7 +152,7 @@ export function buildUserDocument(body) {
 
 export function buildAttachmentDocument(attachment, attachmentKey, cipher) {
   return {
-    cipherUuid: cipher.get('uuid'),
+    cipherUuid: cipher.uuid,
     uuid: attachment.id,
     filename: attachment.filename,
     size: attachment.size,

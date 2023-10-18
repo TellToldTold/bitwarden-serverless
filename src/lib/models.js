@@ -1,4 +1,12 @@
-import { DynamoDBClient, UpdateItemCommand, GetItemCommand, ReturnValue, AttributeAction, PutItemCommand } from "@aws-sdk/client-dynamodb";
+import { DynamoDBClient, ReturnValue} from "@aws-sdk/client-dynamodb";
+import {
+  DeleteCommand,
+  DynamoDBDocumentClient,
+  GetCommand,
+  PutCommand,
+  UpdateCommand,
+  QueryCommand
+} from '@aws-sdk/lib-dynamodb';
 
 let client;
 
@@ -17,6 +25,8 @@ if (process.env.STAGE === 'dev') {
     region: process.env.REGION,
   });
 }
+
+const docClient = DynamoDBDocumentClient.from(client);
 
 const devicesTableName = process.env.DEVICES_TABLE || 'devices';
 const usersTableName = process.env.USERS_TABLE || 'users';
@@ -41,10 +51,10 @@ export const getDevice = async (uuid) => {
   const params = {
     TableName: devicesTableName,
     Key: {
-      "uuid": { S: uuid }
+      uuid: uuid
     }
   };
-  const command = new GetItemCommand(params);
+  const command = new GetCommand(params);
   const response = await client.send(command);
   return response.Item;
 }
@@ -53,17 +63,15 @@ export const updateDevice = async (uuid, pushToken) => {
   const params = {
     TableName: devicesTableName,
     Key: {
-      "uuid": { S: uuid }
+      uuid: uuid
     },
-    AttributeUpdates: {
-      "pushToken": { 
-        Value: { S: pushToken },
-        Action: AttributeAction.PUT,
-      }
+    UpdateExpression: "set pushToken = :pushToken",
+    ExpressionAttributeValues: {
+      ":pushToken": pushToken,
     },
     ReturnValues: ReturnValue.ALL_NEW,
   };
-  const command = new UpdateItemCommand(params);
+  const command = new UpdateCommand(params);
   const response = await client.send(command);
   return response.Attributes;
 }
@@ -94,10 +102,10 @@ export const getUser = async (uuid) => {
   const params = {
     TableName: usersTableName,
     Key: {
-      "uuid": { S: uuid }
+      uuid: uuid
     }
   };
-  const command = new GetItemCommand(params);
+  const command = new GetCommand(params);
   const response = await client.send(command);
   return response.Item;
 }
@@ -123,14 +131,15 @@ export const getUser = async (uuid) => {
 //   card: any | null,
 // }
 
-export const getCipher = async (uuid) => {
+export const getCipher = async (userUuid, uuid) => {
   const params = {
     TableName: cipherTableName,
     Key: {
-      "uuid": { S: uuid }
+      userUuid: userUuid,
+      uuid: uuid
     }
   };
-  const command = new GetItemCommand(params);
+  const command = new GetCommand(params);
   const response = await client.send(command);
   return response.Item;
 }
@@ -140,9 +149,22 @@ export const putCipher = async (cipher) => {
     TableName: cipherTableName,
     Item: cipher,
   };
-  const command = new PutItemCommand(params);
+  const command = new PutCommand(params);
   const response = await client.send(command);
-  return response.Attributes;
+  return response;
+}
+
+export const deleteCipher = async (userUuid, uuid) => {
+  const params = {
+    TableName: cipherTableName,
+    Key: {
+      userUuid: userUuid,
+      uuid: uuid
+    }
+  };
+  const command = new DeleteCommand(params);
+  const response = await client.send(command);
+  return response;
 }
 
 // ========================= Folder =========================
@@ -157,13 +179,14 @@ export const getFolder = async (uuid) => {
   const params = {
     TableName: folderTableName,
     Key: {
-      "uuid": { S: uuid }
+      uuid: uuid
     }
   };
-  const command = new GetItemCommand(params);
+  const command = new GetCommand(params);
   const response = await client.send(command);
   return response.Item;
 }
+
 
 // ========================= Attachment =========================
 
@@ -175,14 +198,40 @@ export const getFolder = async (uuid) => {
 //   key: string,
 // }
 
-export const getAttachment = async (uuid) => {
+export const queryAttachments = async (cipherUuid) => {
+  const params = {
+    TableName: attachmentsTableName,
+    KeyConditionExpression: "cipherUuid = :cipherUuid",
+    ExpressionAttributeValues: {
+      ":cipherUuid": cipherUuid
+    }
+  };
+
+  const command = new QueryCommand(params);
+  const response = await client.send(command);
+
+  return response.Items;
+};
+
+export const putAttachment = async (attachment) => {
+  const params = {
+    TableName: attachmentsTableName,
+    Item: attachment,
+  };
+  const command = new PutCommand(params);
+  const response = await client.send(command);
+  return response;
+}
+
+export const deleteAttachment = async (cipherUuid, uuid) => {
   const params = {
     TableName: attachmentsTableName,
     Key: {
-      "uuid": { S: uuid }
+      cipherUuid: cipherUuid,
+      uuid: uuid
     }
   };
-  const command = new GetItemCommand(params);
+  const command = new DeleteCommand(params);
   const response = await client.send(command);
-  return response.Item;
+  return response;
 }

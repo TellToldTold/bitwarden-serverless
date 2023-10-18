@@ -2,7 +2,7 @@ import S3 from 'aws-sdk/clients/s3';
 import * as utils from './lib/api_utils';
 import { loadContextFromHeader, buildCipherDocument, touch } from './lib/bitwarden';
 import { mapCipher } from './lib/mappers';
-import { Cipher, Attachment } from './lib/models';
+import { Cipher, Attachment, putCipher, getCipher, queryAttachments } from './lib/models';
 
 export const postHandler = async (event, context, callback) => {
   console.log('Cipher create handler triggered', JSON.stringify(event, null, 2));
@@ -28,7 +28,7 @@ export const postHandler = async (event, context, callback) => {
   }
 
   try {
-    const cipher = await Cipher.createAsync(buildCipherDocument(body, user));
+    const cipher = await putCipher(buildCipherDocument(body, user));
 
     await touch(user);
 
@@ -66,7 +66,7 @@ export const putHandler = async (event, context, callback) => {
   }
 
   try {
-    let cipher = await Cipher.getAsync(user.get('uuid'), cipherUuid);
+    let cipher = await getCipher(user.uuid, cipherUuid);
 
     if (!cipher) {
       callback(null, utils.validationError('Unknown vault item'));
@@ -112,12 +112,12 @@ export const deleteHandler = async (event, context, callback) => {
   cipherUuids.forEach(async (cipherUuid) => {
     try {
       // Remove attachments. First retrieve associated attachments to the cipher.
-      const attachments = (await Attachment.query(cipherUuid).execAsync()).Items;
+      const attachments = await queryAttachments(cipherUuid);
       attachments.forEach(async (attachment) => {
         // Remove it from S3 bucket
         const params = {
           Bucket: process.env.ATTACHMENTS_BUCKET,
-          Key: cipherUuid + '/' + attachment.get('uuid'),
+          Key: cipherUuid + '/' + attachment.uuid,
         };
 
         const s3 = new S3();
@@ -130,15 +130,16 @@ export const deleteHandler = async (event, context, callback) => {
         }));
 
         // Remove it from table attachments
-        Attachment.destroyAsync(cipherUuid, attachment.get('uuid'));
+        Attachment.destroyAsync(cipherUuid, attachment.uuid);
       });
 
       // Remove cipher from table ciphers
-      await Cipher.destroyAsync(user.get('uuid'), cipherUuid);
+      await deleteCipher(user.uuid, cipherUuid);
       await touch(user);
     } catch (e) {
       callback(null, utils.validationError(e.toString()));
     }
   });
+
   callback(null, utils.okResponse(''));
 };

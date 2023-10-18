@@ -3,7 +3,7 @@ import uuid4 from 'uuid/v4';
 import * as utils from './lib/api_utils';
 import { loadContextFromHeader, touch, buildAttachmentDocument } from './lib/bitwarden';
 import { mapCipher } from './lib/mappers';
-import { Cipher, Attachment } from './lib/models';
+import { deleteAttachment , getCipher, putAttachment } from './lib/models';
 import { parseMultipart } from './lib/multipart';
 
 export const postHandler = async (event, context, callback) => {
@@ -34,7 +34,7 @@ export const postHandler = async (event, context, callback) => {
   }
 
   try {
-    const cipher = await Cipher.getAsync(user.get('uuid'), cipherUuid);
+    const cipher = await getCipher(user.uuid, cipherUuid);
 
     if (!cipher) {
       callback(null, utils.validationError('Unknown vault item'));
@@ -60,7 +60,7 @@ export const postHandler = async (event, context, callback) => {
       resolve(data);
     }));
 
-    await Attachment.createAsync(buildAttachmentDocument(part, attachmentKey, cipher));
+    await putAttachment(buildAttachmentDocument(part, attachmentKey, cipher));
     await touch(user);
     await touch(cipher);
 
@@ -84,7 +84,7 @@ export const deleteHandler = async (event, context, callback) => {
   const attachmentUuid = event.pathParameters.attachmentId;
 
   try {
-    const cipher = await Cipher.getAsync(user.get('uuid'), cipherUuid);
+    const cipher = await getCipher(user.uuid, cipherUuid);
     if (!cipher) {
       callback(null, utils.validationError('Unknown vault item'));
       return;
@@ -104,7 +104,7 @@ export const deleteHandler = async (event, context, callback) => {
       resolve(data);
     }));
 
-    await Attachment.destroyAsync(cipher.get('uuid'), attachmentUuid);
+    await deleteAttachment(cipher.uuid, attachmentUuid);
     await touch(user);
     await touch(cipher);
 
