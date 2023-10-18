@@ -1,5 +1,16 @@
+import AWS from 'aws-sdk';
 import dynogels from 'dynogels-promisified';
 import Joi from '@hapi/joi';
+
+if (process.env.LOCAL === 'true') {
+  console.log('Using local DynamoDB endpoint' + process.env.LOCAL_DYNAMODB_ENDPOINT)
+  AWS.config.update({
+    region: 'localhost',
+    endpoint: process.env.LOCAL_DYNAMODB_ENDPOINT,
+    accessKeyId: 'MockAccessKeyId',
+    secretAccessKey: 'MockSecretAccessKey',
+  });
+}
 
 const devicesTableName = process.env.DEVICES_TABLE;
 const usersTableName = process.env.USERS_TABLE;

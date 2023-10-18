@@ -31,6 +31,7 @@ plugins:
 
 provider:
   name: aws
+  region: ${opt:region, 'us-east-1'}
   stage: ${opt:stage, 'prod'}
   runtime: nodejs14.x
   memorySize: 256
@@ -38,6 +39,8 @@ provider:
   logs:
     restApi: true
   environment:
+    LOCAL: true
+    LOCAL_DYNAMODB_ENDPOINT: http://localhost:8000
     DEVICES_TABLE: ${self:service}-${self:provider.stage}-devices
     USERS_TABLE: ${self:service}-${self:provider.stage}-users
     CIPHERS_TABLE: ${self:service}-${self:provider.stage}-ciphers
@@ -114,7 +117,7 @@ functions:
           <<: *default_cors
           path: identity/accounts/register
           
-# Accounts endpoints
+  # Accounts endpoints
 
   profile:
     handler: src/accounts.profileHandler
