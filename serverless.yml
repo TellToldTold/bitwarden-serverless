@@ -24,10 +24,17 @@ custom:
         - Pragma
         - Cache-Control
 
+  serverless-dynamodb:
+    stages:
+      - dev
+    start:
+      migrate: true
+
 plugins:
   - serverless-webpack
   - serverless-offline
   - serverless-apigw-binary
+  #- serverless-dynamodb
 
 provider:
   name: aws
@@ -39,7 +46,7 @@ provider:
   logs:
     restApi: true
   environment:
-    LOCAL: true
+    STAGE: ${self:provider.stage}
     LOCAL_DYNAMODB_ENDPOINT: http://localhost:8000
     DEVICES_TABLE: ${self:service}-${self:provider.stage}-devices
     USERS_TABLE: ${self:service}-${self:provider.stage}-users

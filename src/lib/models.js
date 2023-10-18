@@ -2,7 +2,7 @@ import AWS from 'aws-sdk';
 import dynogels from 'dynogels-promisified';
 import Joi from '@hapi/joi';
 
-if (process.env.LOCAL === 'true') {
+if (process.env.STAGE === 'dev') {
   console.log('Using local DynamoDB endpoint' + process.env.LOCAL_DYNAMODB_ENDPOINT)
   AWS.config.update({
     region: 'localhost',
