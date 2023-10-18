@@ -4,7 +4,8 @@
   "description": "AWS Serverless implementation of the Bitwarden API",
   "scripts": {
     "test": "./test.sh",
-    "deploy": "serverless deploy --region $REGION --stage prod"
+    "deploy": "serverless deploy --region $REGION --stage prod",
+    "dev": "serverless offline start --stage dev"
   },
   "devDependencies": {
     "@babel/core": "^7.4.4",
@@ -16,6 +17,7 @@
     "@babel/polyfill": "^7.4.4",
     "@babel/preset-env": "^7.4.4",
     "@babel/register": "^7.4.4",
+    "@types/node": "^20.8.7",
     "babel-loader": "^8.0.6",
     "chakram": "^1.5.0",
     "eslint": "^5.16.0",
@@ -27,14 +29,17 @@
     "serverless-apigw-binary": "^0.4.4",
     "serverless-offline": "^5.12.1",
     "serverless-webpack": "^5.3.0",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.2.2",
     "webpack": "^4.31.0"
   },
   "author": "Vojtěch Vondra",
   "license": "MIT",
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.430.0",
     "@hapi/hoek": "^6.2.1",
     "@hapi/joi": "^15.0.2",
-    "aws-sdk": "^2.453.0",
+    "aws-sdk": "^2.1475.0",
     "buffer-equal-constant-time": "^1.0.1",
     "cryptiles": "^4.1.3",
     "dynogels": "^9.1.0",

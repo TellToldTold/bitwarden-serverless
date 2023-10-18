@@ -1,7 +1,7 @@
 import querystring from 'querystring';
 import speakeasy from 'speakeasy';
 import * as utils from './lib/api_utils';
-import { User, Device } from './lib/models';
+import { User, getDevice,  } from './lib/models';
 import { regenerateTokens, hashesMatch, DEFAULT_VALIDITY } from './lib/bitwarden';
 import { KDF_PBKDF2, KDF_PBKDF2_ITERATIONS_DEFAULT } from './lib/crypto';
 
@@ -83,7 +83,7 @@ export const handler = async (event, context, callback) => {
 
         // Web vault doesn't send device identifier
         if (body.deviceidentifier) {
-          device = await Device.getAsync(body.deviceidentifier);
+          device = await Device.getDevice(body.deviceidentifier);
           if (device && device.get('userUuid') !== user.get('uuid')) {
             await device.destroyAsync();
             device = null;

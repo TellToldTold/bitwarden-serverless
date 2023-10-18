@@ -1,121 +1,188 @@
-import AWS from 'aws-sdk';
-import dynogels from 'dynogels-promisified';
-import Joi from '@hapi/joi';
+import { DynamoDBClient, UpdateItemCommand, GetItemCommand, ReturnValue, AttributeAction, PutItemCommand } from "@aws-sdk/client-dynamodb";
+
+let client;
 
 if (process.env.STAGE === 'dev') {
-  console.log('Using local DynamoDB endpoint' + process.env.LOCAL_DYNAMODB_ENDPOINT)
-  AWS.config.update({
+  console.log('Using local DynamoDB endpoint ' + process.env.LOCAL_DYNAMODB_ENDPOINT);
+  client = new DynamoDBClient({
     region: 'localhost',
     endpoint: process.env.LOCAL_DYNAMODB_ENDPOINT,
-    accessKeyId: 'MockAccessKeyId',
-    secretAccessKey: 'MockSecretAccessKey',
+    credentials: {
+      accessKeyId: 'MockAccessKeyId',
+      secretAccessKey: 'MockSecretAccessKey',
+    }
+  });
+} else {
+  client = new DynamoDBClient({
+    region: process.env.REGION,
   });
 }
 
-const devicesTableName = process.env.DEVICES_TABLE;
-const usersTableName = process.env.USERS_TABLE;
-const cipherTableName = process.env.CIPHERS_TABLE;
-const folderTableName = process.env.FOLDERS_TABLE;
-const attachmentsTableName = process.env.ATTACHMENTS_TABLE;
+const devicesTableName = process.env.DEVICES_TABLE || 'devices';
+const usersTableName = process.env.USERS_TABLE || 'users';
+const cipherTableName = process.env.CIPHERS_TABLE || 'ciphers';
+const folderTableName = process.env.FOLDERS_TABLE || 'folders';
+const attachmentsTableName = process.env.ATTACHMENTS_TABLE || 'attachments';
 
-// Bind internal dynogels logger to console, it supports warn/info/error as needed
-dynogels.log = console;
-
-// The migration script runs updates on the models depending on each row's version
-// This is the latest version available for each model, new entries have this version
 export const CIPHER_MODEL_VERSION = 2;
 export const USER_MODEL_VERSION = 2;
 
-export const Device = dynogels.define('Device', {
-  hashKey: 'uuid',
-  timestamps: true,
-  tableName: devicesTableName,
+// ========================= Device =========================
+// export type deviceSchema = {
+//   uuid: string,
+//   userUuid: string | null,
+//   name:string,
+//   type: number,
+//   pushToken: string | null,
+//   refreshToken: string | null,
+// }
 
-  schema: {
-    uuid: dynogels.types.uuid(),
-    userUuid: Joi.string().required(),
-    name: Joi.string().allow(null),
-    type: Joi.number(),
-    pushToken: Joi.string().allow(null),
-    refreshToken: Joi.string().allow(null),
-  },
-});
+export const getDevice = async (uuid) => {
+  const params = {
+    TableName: devicesTableName,
+    Key: {
+      "uuid": { S: uuid }
+    }
+  };
+  const command = new GetItemCommand(params);
+  const response = await client.send(command);
+  return response.Item;
+}
 
-export const User = dynogels.define('User', {
-  hashKey: 'uuid',
-  timestamps: true,
-  tableName: usersTableName,
+export const updateDevice = async (uuid, pushToken) => {
+  const params = {
+    TableName: devicesTableName,
+    Key: {
+      "uuid": { S: uuid }
+    },
+    AttributeUpdates: {
+      "pushToken": { 
+        Value: { S: pushToken },
+        Action: AttributeAction.PUT,
+      }
+    },
+    ReturnValues: ReturnValue.ALL_NEW,
+  };
+  const command = new UpdateItemCommand(params);
+  const response = await client.send(command);
+  return response.Attributes;
+}
 
-  schema: {
-    uuid: dynogels.types.uuid(),
-    email: Joi.string().email().required(),
-    emailVerified: Joi.boolean(),
-    premium: Joi.boolean(),
-    name: Joi.string().allow(null),
-    passwordHash: Joi.string().required(),
-    passwordHint: Joi.string().allow(null),
-    key: Joi.string(),
-    jwtSecret: Joi.string().required(),
-    privateKey: Joi.binary(),
-    publicKey: Joi.binary(),
-    totpSecret: Joi.string().allow(null),
-    totpSecretTemp: Joi.string().allow(null),
-    securityStamp: dynogels.types.uuid(),
-    culture: Joi.string(),
-    kdfIterations: Joi.number().min(5000).max(1e6),
-    version: Joi.number().allow(null),
-  },
-});
+// ========================= User =========================
 
-export const Cipher = dynogels.define('Cipher', {
-  hashKey: 'userUuid',
-  rangeKey: 'uuid',
-  timestamps: true,
-  tableName: cipherTableName,
+// export type userSchema = {
+//   uuid: string,
+//   email: string,
+//   emailVerified: boolean,
+//   premium: boolean,
+//   name: string | null,
+//   passwordHash: string,
+//   passwordHint: string | null,
+//   key: string,
+//   jwtSecret: string,
+//   privateKey: Buffer,
+//   publicKey: Buffer,
+//   totpSecret: string | null,
+//   totpSecretTemp: string | null,
+//   securityStamp: string,
+//   culture: string,
+//   kdfIterations: number,
+//   version: number | null,
+// }
 
-  schema: {
-    userUuid: Joi.string().required(),
-    uuid: dynogels.types.uuid(), // Auto-generated
-    folderUuid: Joi.string().allow(null),
-    organizationUuid: Joi.string().allow(null),
-    type: Joi.number(),
-    version: Joi.number().allow(null),
-    data: Joi.object().allow(null),
-    favorite: Joi.boolean(),
-    name: Joi.string().allow(null),
-    notes: Joi.string().allow(null),
-    fields: Joi.any().allow(null),
-    login: Joi.object().allow(null),
-    securenote: Joi.object().allow(null),
-    identity: Joi.object().allow(null),
-    card: Joi.object().allow(null),
-  },
-});
+export const getUser = async (uuid) => {
+  const params = {
+    TableName: usersTableName,
+    Key: {
+      "uuid": { S: uuid }
+    }
+  };
+  const command = new GetItemCommand(params);
+  const response = await client.send(command);
+  return response.Item;
+}
 
-export const Folder = dynogels.define('Folder', {
-  hashKey: 'userUuid',
-  rangeKey: 'uuid',
-  timestamps: true,
-  tableName: folderTableName,
 
-  schema: {
-    userUuid: Joi.string().required(),
-    uuid: dynogels.types.uuid(), // Auto-generated
-    name: Joi.string().required(),
-  },
-});
+// ========================= Cipher =========================
 
-export const Attachment = dynogels.define('Attachment', {
-  hashKey: 'cipherUuid',
-  rangeKey: 'uuid',
-  timestamps: true,
-  tableName: attachmentsTableName,
+// export type cipherSchema = {
+//   userUuid: string,
+//   uuid: string,
+//   folderUuid: string | null,
+//   organizationUuid: string | null,
+//   type: number,
+//   version: number | null,
+//   data: any,
+//   favorite: boolean,
+//   name: string | null,
+//   notes: string | null,
+//   fields: any | null,
+//   login: any | null,
+//   securenote: any | null,
+//   identity: any | null,
+//   card: any | null,
+// }
 
-  schema: {
-    cipherUuid: Joi.string().required(),
-    uuid: dynogels.types.uuid(), // Auto-generated
-    filename: Joi.string().required(),
-    size: Joi.number().required(),
-    key: Joi.string(),
-  },
-});
+export const getCipher = async (uuid) => {
+  const params = {
+    TableName: cipherTableName,
+    Key: {
+      "uuid": { S: uuid }
+    }
+  };
+  const command = new GetItemCommand(params);
+  const response = await client.send(command);
+  return response.Item;
+}
+
+export const putCipher = async (cipher) => {
+  const params = {
+    TableName: cipherTableName,
+    Item: cipher,
+  };
+  const command = new PutItemCommand(params);
+  const response = await client.send(command);
+  return response.Attributes;
+}
+
+// ========================= Folder =========================
+
+// export type folderSchema = {
+//   userUuid: string,
+//   uuid: string,
+//   name: string,
+// }
+
+export const getFolder = async (uuid) => {
+  const params = {
+    TableName: folderTableName,
+    Key: {
+      "uuid": { S: uuid }
+    }
+  };
+  const command = new GetItemCommand(params);
+  const response = await client.send(command);
+  return response.Item;
+}
+
+// ========================= Attachment =========================
+
+// export type attachmentSchema = {
+//   cipherUuid: string,
+//   uuid: string,
+//   filename: string,
+//   size: number,
+//   key: string,
+// }
+
+export const getAttachment = async (uuid) => {
+  const params = {
+    TableName: attachmentsTableName,
+    Key: {
+      "uuid": { S: uuid }
+    }
+  };
+  const command = new GetItemCommand(params);
+  const response = await client.send(command);
+  return response.Item;
+}

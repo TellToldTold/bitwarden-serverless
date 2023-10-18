@@ -47,6 +47,7 @@ provider:
     restApi: true
   environment:
     STAGE: ${self:provider.stage}
+    REGION: ${self:provider.region}
     LOCAL_DYNAMODB_ENDPOINT: http://localhost:8000
     DEVICES_TABLE: ${self:service}-${self:provider.stage}-devices
     USERS_TABLE: ${self:service}-${self:provider.stage}-users
