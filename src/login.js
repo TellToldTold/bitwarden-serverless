@@ -1,7 +1,14 @@
 import querystring from 'querystring';
 import speakeasy from 'speakeasy';
 import * as utils from './lib/api_utils';
-import { User, getDevice,  } from './lib/models';
+import {
+  deleteDevice,
+  getDevice,
+  putDevice,
+  scanUser,
+  scanUsers,
+  updateDevice
+} from './lib/models';
 import { regenerateTokens, hashesMatch, DEFAULT_VALIDITY } from './lib/bitwarden';
 import { KDF_PBKDF2, KDF_PBKDF2_ITERATIONS_DEFAULT } from './lib/crypto';
 
@@ -44,24 +51,21 @@ export const handler = async (event, context, callback) => {
           return;
         }
 
-        [user] = (await User.scan()
-          .where('email').equals(body.username.toLowerCase())
-          .execAsync())
-          .Items;
+        user = await scanUser(body.username.toLowerCase());
 
         if (!user) {
           callback(null, utils.validationError('Invalid username or password'));
           return;
         }
 
-        if (!hashesMatch(user.get('passwordHash'), body.password)) {
+        if (!hashesMatch(user.passwordHash, body.password)) {
           callback(null, utils.validationError('Invalid username or password'));
           return;
         }
 
-        if (user.get('totpSecret')) {
+        if (user.totpSecret) {
           const verified = speakeasy.totp.verify({
-            secret: user.get('totpSecret'),
+            secret: user.totpSecret,
             encoding: 'base32',
             token: body.twofactortoken,
           });
@@ -83,17 +87,17 @@ export const handler = async (event, context, callback) => {
 
         // Web vault doesn't send device identifier
         if (body.deviceidentifier) {
-          device = await Device.getDevice(body.deviceidentifier);
-          if (device && device.get('userUuid') !== user.get('uuid')) {
-            await device.destroyAsync();
+          device = await getDevice(body.deviceidentifier);
+          if (device && device.userUuid !== user.uuid) {
+            await deleteDevice(device.uuid)
             device = null;
           }
         }
 
+        let deviceUuid;
         if (!device) {
-          device = await Device.createAsync({
+          deviceUuid = await updateDevice(body.deviceidentifier, {
             userUuid: user.get('uuid'),
-            uuid: body.deviceidentifier,
           });
         }
 

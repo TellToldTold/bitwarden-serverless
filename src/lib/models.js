@@ -7,7 +7,8 @@ import {
   GetCommand,
   PutCommand,
   UpdateCommand,
-  QueryCommand
+  QueryCommand,
+  ScanCommand,
 } from '@aws-sdk/lib-dynamodb';
 
 let client;
@@ -216,16 +217,14 @@ export const getDevice = async (uuid) => {
   return response.Item;
 }
 
-export const updateDevice = async (uuid, pushToken) => {
+export const updateDevice = async (uuid, data) =>{
   const params = {
     TableName: tableNames.devices,
     Key: {
       uuid: uuid
     },
-    UpdateExpression: "set pushToken = :pushToken",
-    ExpressionAttributeValues: {
-      ":pushToken": pushToken,
-    },
+    UpdateExpression: "set " + Object.keys(data).map(key => `${key} = :${key}`).join(", "),
+    ExpressionAttributeValues: data,
     ReturnValues: ReturnValue.ALL_NEW,
   };
   const command = new UpdateCommand(params);
@@ -233,6 +232,33 @@ export const updateDevice = async (uuid, pushToken) => {
   return response.Attributes;
 }
 
+export const putDevice = async (device) => {
+
+      const generatedUuid = uuidv4();
+
+      const params = {
+        TableName: tableNames.devices,
+        Item: {
+          uuid: generatedUuid,
+          ...device
+        },
+      };
+      const command = new PutCommand(params);
+      await docClient.send(command);
+      return generatedUuid;
+}
+
+export const deleteDevice = async (uuid) => {
+  const params = {
+    TableName: tableNames.devices,
+    Key: {
+      uuid: uuid
+    }
+  };
+  const command = new DeleteCommand(params);
+  const response = await docClient.send(command);
+  return response;
+}
 
 // ========================= Folder =========================
 
@@ -332,4 +358,17 @@ export const getUser = async (uuid) => {
   const command = new GetCommand(params);
   const response = await docClient.send(command);
   return response.Item;
+}
+
+export const scanUser = async (email) => {
+  const params = {
+    TableName: tableNames.users,
+    FilterExpression: "email = :email",
+    ExpressionAttributeValues: {
+      ":email": email
+    }
+  };
+  const command = new ScanCommand(params);
+  const response = await docClient.send(command);
+  return response.Items;
 }

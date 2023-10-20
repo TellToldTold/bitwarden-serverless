@@ -1,5 +1,5 @@
 import { normalizeBody, validationError, okResponse } from './lib/api_utils';
-import { Cipher, Folder, putFolder } from './lib/models';
+import { putCipher, putFolder, touch } from './lib/models';
 import { loadContextFromHeader, buildCipherDocument } from './lib/bitwarden';
 
 const MAX_RETRIES = 4;
@@ -108,7 +108,7 @@ export const postHandler = async (event, context, callback) => {
   }
 
   const createCipher = cipher => (
-    Cipher.createAsync(cipher)
+    putCipher(cipher)
       .then(result => ({ success: true, result, model: cipher }))
       .catch(error => ({ success: false, error, model: cipher }))
   );
@@ -140,7 +140,7 @@ export const postHandler = async (event, context, callback) => {
     callback(null, validationError(cipherOutput.join(' ')));
   }
 
-  await touch(user);
+  await touch('users', user);
 
   callback(null, okResponse(''));
 };

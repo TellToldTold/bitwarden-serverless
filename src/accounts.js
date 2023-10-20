@@ -82,7 +82,7 @@ export const pushTokenHandler = async (event, context, callback) => {
   const body = utils.normalizeBody(JSON.parse(event.body));
 
   try {
-    await updateDevice(event.pathParameters.uuid, body.pushtoken);
+    await updateDevice(event.pathParameters.uuid, { pushToken: body.pushToken });
 
     callback(null, {
       statusCode: 204,
