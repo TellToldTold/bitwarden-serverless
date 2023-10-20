@@ -7,3 +7,10 @@ jspm_packages
 
 # Webpack directories
 .webpack
+.idea/bitwarden-serverless.iml
+
+.idea/modules.xml
+
+.idea/workspace.xml
+
+.idea/

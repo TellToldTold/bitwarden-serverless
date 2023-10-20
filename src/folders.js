@@ -1,7 +1,7 @@
 import * as utils from './lib/api_utils';
-import { loadContextFromHeader, touch } from './lib/bitwarden';
+import { loadContextFromHeader } from './lib/bitwarden';
 import { mapFolder } from './lib/mappers';
-import { Folder } from './lib/models';
+import { deleteFolder, getFolder, putFolder, touch, updateFolder } from './lib/models';
 
 export const postHandler = async (event, context, callback) => {
   console.log('Folder create handler triggered', JSON.stringify(event, null, 2));
@@ -27,13 +27,14 @@ export const postHandler = async (event, context, callback) => {
   }
 
   try {
-    const folder = await Folder.createAsync({
+    const folderUuid = await putFolder({
       name: body.name,
-      userUuid: user.get('uuid'),
+      userUuid: user.uuid,
     });
-    await touch(user);
 
-    callback(null, utils.okResponse(mapFolder(folder)));
+    await touch('users', user);
+
+    callback(null, utils.okResponse(mapFolder(await getFolder(user.uuid, folderUuid))));
   } catch (e) {
     callback(null, utils.serverError('Server error saving folder', e));
   }
@@ -67,19 +68,18 @@ export const putHandler = async (event, context, callback) => {
   }
 
   try {
-    let folder = await Folder.getAsync(user.get('uuid'), folderUuid);
-    await touch(user);
+    let folder = await getFolder(user.uuid, folderUuid);
+
+    await touch('users', user);
 
     if (!folder) {
       callback(null, utils.validationError('Unknown folder'));
       return;
     }
 
-    folder.set({ name: body.name });
+    await updateFolder(user.uuid, folderUuid, { name: body.name });
 
-    folder = await folder.updateAsync();
-
-    callback(null, utils.okResponse(mapFolder(folder)));
+    callback(null, utils.okResponse(mapFolder(await getFolder(user.uuid, folderUuid))));
   } catch (e) {
     callback(null, utils.serverError('Server error saving folder', e));
   }
@@ -101,8 +101,9 @@ export const deleteHandler = async (event, context, callback) => {
   }
 
   try {
-    await Folder.destroyAsync(user.get('uuid'), folderUuid);
-    await touch(user);
+    await deleteFolder(user.uuid, folderUuid);
+
+    await touch('users', user);
 
     callback(null, utils.okResponse(''));
   } catch (e) {

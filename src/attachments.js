@@ -1,9 +1,9 @@
 import S3 from 'aws-sdk/clients/s3';
 import uuid4 from 'uuid/v4';
 import * as utils from './lib/api_utils';
-import { loadContextFromHeader, touch, buildAttachmentDocument } from './lib/bitwarden';
+import { loadContextFromHeader, buildAttachmentDocument } from './lib/bitwarden';
 import { mapCipher } from './lib/mappers';
-import { deleteAttachment , getCipher, putAttachment } from './lib/models';
+import { deleteAttachment , getCipher, putAttachment, touch } from './lib/models';
 import { parseMultipart } from './lib/multipart';
 
 export const postHandler = async (event, context, callback) => {
@@ -61,8 +61,8 @@ export const postHandler = async (event, context, callback) => {
     }));
 
     await putAttachment(buildAttachmentDocument(part, attachmentKey, cipher));
-    await touch(user);
-    await touch(cipher);
+    await touch('users', user);
+    await touch('ciphers', cipher);
 
     callback(null, utils.okResponse(await mapCipher(cipher)));
   } catch (e) {
@@ -105,8 +105,8 @@ export const deleteHandler = async (event, context, callback) => {
     }));
 
     await deleteAttachment(cipher.uuid, attachmentUuid);
-    await touch(user);
-    await touch(cipher);
+    await touch('users', user);
+    await touch('ciphers', cipher);
 
     callback(null, utils.okResponse(''));
   } catch (e) {

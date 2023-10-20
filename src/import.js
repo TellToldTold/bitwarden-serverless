@@ -1,6 +1,6 @@
 import { normalizeBody, validationError, okResponse } from './lib/api_utils';
-import { Cipher, Folder } from './lib/models';
-import { loadContextFromHeader, buildCipherDocument, touch } from './lib/bitwarden';
+import { Cipher, Folder, putFolder } from './lib/models';
+import { loadContextFromHeader, buildCipherDocument } from './lib/bitwarden';
 
 const MAX_RETRIES = 4;
 
@@ -74,10 +74,10 @@ export const postHandler = async (event, context, callback) => {
     return;
   }
 
-  const createFolder = (f, u) => (Folder
-    .createAsync({
+  const createFolder = (f, u) => (
+    putFolder({
       name: f.name,
-      userUuid: u.get('uuid'),
+      userUuid: u.uuid,
     })
     .then(result => ({ success: true, result, model: f }))
     .catch(error => ({ success: false, error, model: f }))

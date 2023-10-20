@@ -280,33 +280,21 @@ resources:
                 SSEAlgorithm: aws:kms
         BucketName: ${self:provider.environment.ATTACHMENTS_BUCKET}
 
-    UsersTable:
+    AttachmentsTable:
       Type: AWS::DynamoDB::Table
       DeletionPolicy: ${self:custom.tableDeletionPolicy.${self:provider.stage}, self:custom.tableDeletionPolicy.other}
       Properties:
-        TableName: ${self:provider.environment.USERS_TABLE}
+        TableName: ${self:provider.environment.ATTACHMENTS_TABLE}
         AttributeDefinitions:
+          - AttributeName: cipherUuid
+            AttributeType: S
           - AttributeName: uuid
             AttributeType: S
         KeySchema:
-          - AttributeName: uuid
+          - AttributeName: cipherUuid
             KeyType: HASH
-        ProvisionedThroughput:
-          ReadCapacityUnits: 1
-          WriteCapacityUnits: 1
-        PointInTimeRecoverySpecification:
-          PointInTimeRecoveryEnabled: true
-    DevicesTable:
-      Type: AWS::DynamoDB::Table
-      DeletionPolicy: ${self:custom.tableDeletionPolicy.${self:provider.stage}, self:custom.tableDeletionPolicy.other}
-      Properties:
-        TableName: ${self:provider.environment.DEVICES_TABLE}
-        AttributeDefinitions:
           - AttributeName: uuid
-            AttributeType: S
-        KeySchema:
-          - AttributeName: uuid
-            KeyType: HASH
+            KeyType: RANGE
         ProvisionedThroughput:
           ReadCapacityUnits: 1
           WriteCapacityUnits: 1
@@ -332,6 +320,22 @@ resources:
           WriteCapacityUnits: 3
         PointInTimeRecoverySpecification:
           PointInTimeRecoveryEnabled: true
+    DevicesTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: ${self:custom.tableDeletionPolicy.${self:provider.stage}, self:custom.tableDeletionPolicy.other}
+      Properties:
+        TableName: ${self:provider.environment.DEVICES_TABLE}
+        AttributeDefinitions:
+          - AttributeName: uuid
+            AttributeType: S
+        KeySchema:
+          - AttributeName: uuid
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
     FoldersTable:
       Type: AWS::DynamoDB::Table
       DeletionPolicy: ${self:custom.tableDeletionPolicy.${self:provider.stage}, self:custom.tableDeletionPolicy.other}
@@ -352,24 +356,20 @@ resources:
           WriteCapacityUnits: 1
         PointInTimeRecoverySpecification:
           PointInTimeRecoveryEnabled: true
-
-    AttachmentsTable:
+    UsersTable:
       Type: AWS::DynamoDB::Table
       DeletionPolicy: ${self:custom.tableDeletionPolicy.${self:provider.stage}, self:custom.tableDeletionPolicy.other}
       Properties:
-        TableName: ${self:provider.environment.ATTACHMENTS_TABLE}
+        TableName: ${self:provider.environment.USERS_TABLE}
         AttributeDefinitions:
-          - AttributeName: cipherUuid
-            AttributeType: S
           - AttributeName: uuid
             AttributeType: S
         KeySchema:
-          - AttributeName: cipherUuid
-            KeyType: HASH
           - AttributeName: uuid
-            KeyType: RANGE
+            KeyType: HASH
         ProvisionedThroughput:
           ReadCapacityUnits: 1
           WriteCapacityUnits: 1
         PointInTimeRecoverySpecification:
           PointInTimeRecoveryEnabled: true
+

@@ -1,4 +1,6 @@
 import { DynamoDBClient, ReturnValue} from "@aws-sdk/client-dynamodb";
+import { v4 as uuidv4 } from 'uuid';
+
 import {
   DeleteCommand,
   DynamoDBDocumentClient,
@@ -28,14 +30,169 @@ if (process.env.STAGE === 'dev') {
 
 const docClient = DynamoDBDocumentClient.from(client);
 
-const devicesTableName = process.env.DEVICES_TABLE || 'devices';
-const usersTableName = process.env.USERS_TABLE || 'users';
-const cipherTableName = process.env.CIPHERS_TABLE || 'ciphers';
-const folderTableName = process.env.FOLDERS_TABLE || 'folders';
-const attachmentsTableName = process.env.ATTACHMENTS_TABLE || 'attachments';
+const tableNames = {
+  devices : process.env.DEVICES_TABLE || 'devices',
+  users : process.env.USERS_TABLE || 'users',
+  ciphers : process.env.CIPHERS_TABLE || 'ciphers',
+  folders : process.env.FOLDERS_TABLE || 'folders',
+  attachments : process.env.ATTACHMENTS_TABLE || 'attachments',
+}
 
 export const CIPHER_MODEL_VERSION = 2;
 export const USER_MODEL_VERSION = 2;
+
+
+// ========================= Attachment =========================
+
+// export type attachmentSchema = {
+//   cipherUuid: string,
+//   uuid: string,
+//   filename: string,
+//   size: number,
+//   key: string,
+// }
+
+export const queryAttachments = async (cipherUuid) => {
+  const params = {
+    TableName: tableNames.attachments,
+    KeyConditionExpression: "cipherUuid = :cipherUuid",
+    ExpressionAttributeValues: {
+      ":cipherUuid": cipherUuid
+    }
+  };
+
+  const command = new QueryCommand(params);
+  const response = await docClient.send(command);
+
+  return response.Items;
+};
+
+export const putAttachment = async (attachment) => {
+
+  const generatedUuid = uuidv4();
+
+  const params = {
+    TableName: tableNames.attachments,
+    Item: {
+      uuid: generatedUuid,
+      ...attachment
+    },
+  };
+  const command = new PutCommand(params);
+  await docClient.send(command);
+  return generatedUuid;
+}
+
+export const deleteAttachment = async (cipherUuid, uuid) => {
+  const params = {
+    TableName: tableNames.attachments,
+    Key: {
+      cipherUuid: cipherUuid,
+      uuid: uuid
+    }
+  };
+  const command = new DeleteCommand(params);
+  const response = await docClient.send(command);
+  return response;
+}
+
+
+export const touch = async (table, object) => {
+  const params = {
+    TableName: tableNames[table],
+    Key: {
+      uuid: object.uuid
+    },
+    UpdateExpression: "set updatedAt = :updatedAt",
+    ExpressionAttributeValues: {
+      ":updatedAt": new Date().toISOString(),
+    },
+    ReturnValues: ReturnValue.ALL_NEW,
+  };
+  const command = new UpdateCommand(params);
+  const response = await docClient.send(command);
+  return response.Attributes;
+}
+
+
+// ========================= Cipher =========================
+
+// export type cipherSchema = {
+//   userUuid: string,
+//   uuid: string,
+//   folderUuid: string | null,
+//   organizationUuid: string | null,
+//   type: number,
+//   version: number | null,
+//   data: any,
+//   favorite: boolean,
+//   name: string | null,
+//   notes: string | null,
+//   fields: any | null,
+//   login: any | null,
+//   securenote: any | null,
+//   identity: any | null,
+//   card: any | null,
+// }
+
+export const getCipher = async (userUuid, uuid) => {
+  const params = {
+    TableName: tableNames.ciphers,
+    Key: {
+      userUuid: userUuid,
+      uuid: uuid
+    }
+  };
+  const command = new GetCommand(params);
+  const response = await docClient.send(command);
+  return response.Item;
+}
+
+export const updateCipher = async (userUuid, uuid, data) => {
+  const params = {
+    TableName: tableNames.ciphers,
+    Key: {
+      userUuid: userUuid,
+      uuid: uuid
+    },
+    UpdateExpression: "set " + Object.keys(data).map(key => `${key} = :${key}`).join(", "),
+    ExpressionAttributeValues: data,
+    ReturnValues: ReturnValue.ALL_NEW,
+  };
+  const command = new UpdateCommand(params);
+  const response = await docClient.send(command);
+  return response.Attributes;
+}
+
+export const putCipher = async (cipher) => {
+
+  const generatedUuid = uuidv4();
+
+  const params = {
+    TableName: tableNames.ciphers,
+    Item: {
+      uuid: generatedUuid,
+      ...cipher
+    },
+  };
+  const command = new PutCommand(params);
+  await docClient.send(command);
+  return generatedUuid;
+}
+
+export const deleteCipher = async (userUuid, uuid) => {
+  const params = {
+    TableName: tableNames.ciphers,
+    Key: {
+      userUuid: userUuid,
+      uuid: uuid
+    }
+  };
+  const command = new DeleteCommand(params);
+  const response = await docClient.send(command);
+  return response;
+}
+
 
 // ========================= Device =========================
 // export type deviceSchema = {
@@ -49,19 +206,19 @@ export const USER_MODEL_VERSION = 2;
 
 export const getDevice = async (uuid) => {
   const params = {
-    TableName: devicesTableName,
+    TableName: tableNames.devices,
     Key: {
       uuid: uuid
     }
   };
   const command = new GetCommand(params);
-  const response = await client.send(command);
+  const response = await docClient.send(command);
   return response.Item;
 }
 
 export const updateDevice = async (uuid, pushToken) => {
   const params = {
-    TableName: devicesTableName,
+    TableName: tableNames.devices,
     Key: {
       uuid: uuid
     },
@@ -72,8 +229,75 @@ export const updateDevice = async (uuid, pushToken) => {
     ReturnValues: ReturnValue.ALL_NEW,
   };
   const command = new UpdateCommand(params);
-  const response = await client.send(command);
+  const response = await docClient.send(command);
   return response.Attributes;
+}
+
+
+// ========================= Folder =========================
+
+// export type folderSchema = {
+//   userUuid: string,
+//   uuid: string,
+//   name: string,
+// }
+
+export const getFolder = async (userUuid, uuid) => {
+  const params = {
+    TableName: tableNames.folders,
+    Key: {
+      userUuid: userUuid,
+      uuid: uuid
+    }
+  };
+  const command = new GetCommand(params);
+  const response = await docClient.send(command);
+  return response.Item;
+}
+
+export const updateFolder = async (userUuid, uuid, data) => {
+  const params = {
+    TableName: tableNames.folders,
+    Key: {
+      userUuid: userUuid,
+      uuid: uuid
+    },
+    UpdateExpression: "set " + Object.keys(data).map(key => `${key} = :${key}`).join(", "),
+    ExpressionAttributeValues: data,
+    ReturnValues: ReturnValue.ALL_NEW,
+  };
+  const command = new UpdateCommand(params);
+  const response = await docClient.send(command);
+  return response.Attributes;
+}
+
+export const putFolder = async (folder) => {
+
+    const generatedUuid = uuidv4();
+
+    const params = {
+      TableName: tableNames.folders,
+      Item: {
+        uuid: generatedUuid,
+        ...folder
+      },
+    };
+    const command = new PutCommand(params);
+    await docClient.send(command);
+    return generatedUuid;
+}
+
+export const deleteFolder = async (userUuid, uuid) => {
+  const params = {
+    TableName: tableNames.folders,
+    Key: {
+      userUuid: userUuid,
+      uuid: uuid
+    }
+  };
+  const command = new DeleteCommand(params);
+  const response = await docClient.send(command);
+  return response;
 }
 
 // ========================= User =========================
@@ -100,138 +324,12 @@ export const updateDevice = async (uuid, pushToken) => {
 
 export const getUser = async (uuid) => {
   const params = {
-    TableName: usersTableName,
+    TableName: tableNames.devices,
     Key: {
       uuid: uuid
     }
   };
   const command = new GetCommand(params);
-  const response = await client.send(command);
+  const response = await docClient.send(command);
   return response.Item;
-}
-
-
-// ========================= Cipher =========================
-
-// export type cipherSchema = {
-//   userUuid: string,
-//   uuid: string,
-//   folderUuid: string | null,
-//   organizationUuid: string | null,
-//   type: number,
-//   version: number | null,
-//   data: any,
-//   favorite: boolean,
-//   name: string | null,
-//   notes: string | null,
-//   fields: any | null,
-//   login: any | null,
-//   securenote: any | null,
-//   identity: any | null,
-//   card: any | null,
-// }
-
-export const getCipher = async (userUuid, uuid) => {
-  const params = {
-    TableName: cipherTableName,
-    Key: {
-      userUuid: userUuid,
-      uuid: uuid
-    }
-  };
-  const command = new GetCommand(params);
-  const response = await client.send(command);
-  return response.Item;
-}
-
-export const putCipher = async (cipher) => {
-  const params = {
-    TableName: cipherTableName,
-    Item: cipher,
-  };
-  const command = new PutCommand(params);
-  const response = await client.send(command);
-  return response;
-}
-
-export const deleteCipher = async (userUuid, uuid) => {
-  const params = {
-    TableName: cipherTableName,
-    Key: {
-      userUuid: userUuid,
-      uuid: uuid
-    }
-  };
-  const command = new DeleteCommand(params);
-  const response = await client.send(command);
-  return response;
-}
-
-// ========================= Folder =========================
-
-// export type folderSchema = {
-//   userUuid: string,
-//   uuid: string,
-//   name: string,
-// }
-
-export const getFolder = async (uuid) => {
-  const params = {
-    TableName: folderTableName,
-    Key: {
-      uuid: uuid
-    }
-  };
-  const command = new GetCommand(params);
-  const response = await client.send(command);
-  return response.Item;
-}
-
-
-// ========================= Attachment =========================
-
-// export type attachmentSchema = {
-//   cipherUuid: string,
-//   uuid: string,
-//   filename: string,
-//   size: number,
-//   key: string,
-// }
-
-export const queryAttachments = async (cipherUuid) => {
-  const params = {
-    TableName: attachmentsTableName,
-    KeyConditionExpression: "cipherUuid = :cipherUuid",
-    ExpressionAttributeValues: {
-      ":cipherUuid": cipherUuid
-    }
-  };
-
-  const command = new QueryCommand(params);
-  const response = await client.send(command);
-
-  return response.Items;
-};
-
-export const putAttachment = async (attachment) => {
-  const params = {
-    TableName: attachmentsTableName,
-    Item: attachment,
-  };
-  const command = new PutCommand(params);
-  const response = await client.send(command);
-  return response;
-}
-
-export const deleteAttachment = async (cipherUuid, uuid) => {
-  const params = {
-    TableName: attachmentsTableName,
-    Key: {
-      cipherUuid: cipherUuid,
-      uuid: uuid
-    }
-  };
-  const command = new DeleteCommand(params);
-  const response = await client.send(command);
-  return response;
 }
