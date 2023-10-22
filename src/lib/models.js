@@ -1,42 +1,42 @@
-import { DynamoDBClient, ReturnValue} from "@aws-sdk/client-dynamodb";
-import { v4 as uuidv4 } from 'uuid';
+import {DynamoDBClient, ReturnValue} from "@aws-sdk/client-dynamodb";
+import {v4 as uuidv4} from 'uuid';
 
 import {
-  DeleteCommand,
-  DynamoDBDocumentClient,
-  GetCommand,
-  PutCommand,
-  UpdateCommand,
-  QueryCommand,
-  ScanCommand,
+    DeleteCommand,
+    DynamoDBDocumentClient,
+    GetCommand,
+    PutCommand,
+    UpdateCommand,
+    QueryCommand,
+    ScanCommand,
 } from '@aws-sdk/lib-dynamodb';
 
 let client;
 
 if (process.env.STAGE === 'dev') {
-  console.log('Using local DynamoDB endpoint ' + process.env.LOCAL_DYNAMODB_ENDPOINT);
-  client = new DynamoDBClient({
-    region: 'localhost',
-    endpoint: process.env.LOCAL_DYNAMODB_ENDPOINT,
-    credentials: {
-      accessKeyId: 'MockAccessKeyId',
-      secretAccessKey: 'MockSecretAccessKey',
-    }
-  });
+    console.log('Using local DynamoDB endpoint ' + process.env.LOCAL_DYNAMODB_ENDPOINT);
+    client = new DynamoDBClient({
+        region: 'localhost',
+        endpoint: process.env.LOCAL_DYNAMODB_ENDPOINT,
+        credentials: {
+            accessKeyId: 'MockAccessKeyId',
+            secretAccessKey: 'MockSecretAccessKey',
+        }
+    });
 } else {
-  client = new DynamoDBClient({
-    region: process.env.REGION,
-  });
+    client = new DynamoDBClient({
+        region: process.env.REGION,
+    });
 }
 
 const docClient = DynamoDBDocumentClient.from(client);
 
 const tableNames = {
-  devices : process.env.DEVICES_TABLE || 'devices',
-  users : process.env.USERS_TABLE || 'users',
-  ciphers : process.env.CIPHERS_TABLE || 'ciphers',
-  folders : process.env.FOLDERS_TABLE || 'folders',
-  attachments : process.env.ATTACHMENTS_TABLE || 'attachments',
+    devices: process.env.DEVICES_TABLE || 'devices',
+    users: process.env.USERS_TABLE || 'users',
+    ciphers: process.env.CIPHERS_TABLE || 'ciphers',
+    folders: process.env.FOLDERS_TABLE || 'folders',
+    attachments: process.env.ATTACHMENTS_TABLE || 'attachments',
 }
 
 export const CIPHER_MODEL_VERSION = 2;
@@ -54,65 +54,65 @@ export const USER_MODEL_VERSION = 2;
 // }
 
 export const queryAttachments = async (cipherUuid) => {
-  const params = {
-    TableName: tableNames.attachments,
-    KeyConditionExpression: "cipherUuid = :cipherUuid",
-    ExpressionAttributeValues: {
-      ":cipherUuid": cipherUuid
-    }
-  };
+    const params = {
+        TableName: tableNames.attachments,
+        KeyConditionExpression: "cipherUuid = :cipherUuid",
+        ExpressionAttributeValues: {
+            ":cipherUuid": cipherUuid
+        }
+    };
 
-  const command = new QueryCommand(params);
-  const response = await docClient.send(command);
+    const command = new QueryCommand(params);
+    const response = await docClient.send(command);
 
-  return response.Items;
+    return response.Items;
 };
 
 export const putAttachment = async (attachment) => {
 
-  const generatedUuid = uuidv4();
+    const generatedUuid = uuidv4();
 
-  const params = {
-    TableName: tableNames.attachments,
-    Item: {
-      uuid: generatedUuid,
-      ...attachment
-    },
-  };
-  const command = new PutCommand(params);
-  await docClient.send(command);
-  return generatedUuid;
+    const params = {
+        TableName: tableNames.attachments,
+        Item: {
+            uuid: generatedUuid,
+            ...attachment
+        },
+    };
+    const command = new PutCommand(params);
+    await docClient.send(command);
+    return generatedUuid;
 }
 
 export const deleteAttachment = async (cipherUuid, uuid) => {
-  const params = {
-    TableName: tableNames.attachments,
-    Key: {
-      cipherUuid: cipherUuid,
-      uuid: uuid
-    }
-  };
-  const command = new DeleteCommand(params);
-  const response = await docClient.send(command);
-  return response;
+    const params = {
+        TableName: tableNames.attachments,
+        Key: {
+            cipherUuid: cipherUuid,
+            uuid: uuid
+        }
+    };
+    const command = new DeleteCommand(params);
+    const response = await docClient.send(command);
+    return response;
 }
 
 
 export const touch = async (table, object) => {
-  const params = {
-    TableName: tableNames[table],
-    Key: {
-      uuid: object.uuid
-    },
-    UpdateExpression: "set updatedAt = :updatedAt",
-    ExpressionAttributeValues: {
-      ":updatedAt": new Date().toISOString(),
-    },
-    ReturnValues: ReturnValue.ALL_NEW,
-  };
-  const command = new UpdateCommand(params);
-  const response = await docClient.send(command);
-  return response.Attributes;
+    const params = {
+        TableName: tableNames[table],
+        Key: {
+            uuid: object.uuid
+        },
+        UpdateExpression: "set updatedAt = :updatedAt",
+        ExpressionAttributeValues: {
+            ":updatedAt": new Date().toISOString(),
+        },
+        ReturnValues: ReturnValue.ALL_NEW,
+    };
+    const command = new UpdateCommand(params);
+    const response = await docClient.send(command);
+    return response.Attributes;
 }
 
 
@@ -137,61 +137,81 @@ export const touch = async (table, object) => {
 // }
 
 export const getCipher = async (userUuid, uuid) => {
-  const params = {
-    TableName: tableNames.ciphers,
-    Key: {
-      userUuid: userUuid,
-      uuid: uuid
-    }
-  };
-  const command = new GetCommand(params);
-  const response = await docClient.send(command);
-  return response.Item;
+    const params = {
+        TableName: tableNames.ciphers,
+        Key: {
+            userUuid: userUuid,
+            uuid: uuid
+        }
+    };
+    const command = new GetCommand(params);
+    const response = await docClient.send(command);
+    return response.Item;
+}
+
+export const scanAllCiphers = async () => {
+    const command = new ScanCommand({TableName: tableNames.ciphers});
+    const response = await docClient.send(command);
+    return response.Items;
 }
 
 export const updateCipher = async (userUuid, uuid, data) => {
-  const params = {
-    TableName: tableNames.ciphers,
-    Key: {
-      userUuid: userUuid,
-      uuid: uuid
-    },
-    UpdateExpression: "set " + Object.keys(data).map(key => `${key} = :${key}`).join(", "),
-    ExpressionAttributeValues: data,
-    ReturnValues: ReturnValue.ALL_NEW,
-  };
-  const command = new UpdateCommand(params);
-  const response = await docClient.send(command);
-  return response.Attributes;
+    const params = {
+        TableName: tableNames.ciphers,
+        Key: {
+            userUuid: userUuid,
+            uuid: uuid
+        },
+        UpdateExpression: "set " + Object.keys(data).map(key => `${key} = :${key}`).join(", "),
+        ExpressionAttributeValues: data,
+        ReturnValues: ReturnValue.ALL_NEW,
+    };
+    const command = new UpdateCommand(params);
+    const response = await docClient.send(command);
+    return response.Attributes;
+}
+
+export const queryCiphers = async (userUuid) => {
+    const params = {
+        TableName: tableNames.ciphers,
+        KeyConditionExpression: "userUuid = :userUuid",
+        ExpressionAttributeValues: {
+            ":userUuid": userUuid
+        }
+    };
+
+    const command = new QueryCommand(params);
+    const response = await docClient.send(command);
+    return response.Items;
 }
 
 export const putCipher = async (cipher) => {
 
-  const generatedUuid = uuidv4();
+    const generatedUuid = uuidv4();
 
-  const params = {
-    TableName: tableNames.ciphers,
-    Item: {
-      uuid: generatedUuid,
-      ...cipher
-    },
-  };
-  const command = new PutCommand(params);
-  await docClient.send(command);
-  return generatedUuid;
+    const params = {
+        TableName: tableNames.ciphers,
+        Item: {
+            uuid: generatedUuid,
+            ...cipher
+        },
+    };
+    const command = new PutCommand(params);
+    await docClient.send(command);
+    return generatedUuid;
 }
 
 export const deleteCipher = async (userUuid, uuid) => {
-  const params = {
-    TableName: tableNames.ciphers,
-    Key: {
-      userUuid: userUuid,
-      uuid: uuid
-    }
-  };
-  const command = new DeleteCommand(params);
-  const response = await docClient.send(command);
-  return response;
+    const params = {
+        TableName: tableNames.ciphers,
+        Key: {
+            userUuid: userUuid,
+            uuid: uuid
+        }
+    };
+    const command = new DeleteCommand(params);
+    const response = await docClient.send(command);
+    return response;
 }
 
 
@@ -206,58 +226,71 @@ export const deleteCipher = async (userUuid, uuid) => {
 // }
 
 export const getDevice = async (uuid) => {
-  const params = {
-    TableName: tableNames.devices,
-    Key: {
-      uuid: uuid
-    }
-  };
-  const command = new GetCommand(params);
-  const response = await docClient.send(command);
-  return response.Item;
+    const params = {
+        TableName: tableNames.devices,
+        Key: {
+            uuid: uuid
+        }
+    };
+    const command = new GetCommand(params);
+    const response = await docClient.send(command);
+    return response.Item;
 }
 
-export const updateDevice = async (uuid, data) =>{
-  const params = {
-    TableName: tableNames.devices,
-    Key: {
-      uuid: uuid
-    },
-    UpdateExpression: "set " + Object.keys(data).map(key => `${key} = :${key}`).join(", "),
-    ExpressionAttributeValues: data,
-    ReturnValues: ReturnValue.ALL_NEW,
-  };
-  const command = new UpdateCommand(params);
-  const response = await docClient.send(command);
-  return response.Attributes;
+export const updateDevice = async (uuid, data) => {
+    const params = {
+        TableName: tableNames.devices,
+        Key: {
+            uuid: uuid
+        },
+        UpdateExpression: "set " + Object.keys(data).map(key => `${key} = :${key}`).join(", "),
+        ExpressionAttributeValues: data,
+        ReturnValues: ReturnValue.ALL_NEW,
+    };
+    const command = new UpdateCommand(params);
+    const response = await docClient.send(command);
+    return response.Attributes;
+}
+
+export const scanDevice = async (refreshToken) => {
+    const params = {
+        TableName: tableNames.devices,
+        FilterExpression: "refreshToken = :refreshToken",
+        ExpressionAttributeValues: {
+            ":refreshToken": refreshToken
+        }
+    };
+    const command = new ScanCommand(params);
+    const response = await docClient.send(command);
+    return response.Items;
 }
 
 export const putDevice = async (device) => {
 
-      const generatedUuid = uuidv4();
+    const generatedUuid = uuidv4();
 
-      const params = {
+    const params = {
         TableName: tableNames.devices,
         Item: {
-          uuid: generatedUuid,
-          ...device
+            uuid: generatedUuid,
+            ...device
         },
-      };
-      const command = new PutCommand(params);
-      await docClient.send(command);
-      return generatedUuid;
+    };
+    const command = new PutCommand(params);
+    await docClient.send(command);
+    return generatedUuid;
 }
 
 export const deleteDevice = async (uuid) => {
-  const params = {
-    TableName: tableNames.devices,
-    Key: {
-      uuid: uuid
-    }
-  };
-  const command = new DeleteCommand(params);
-  const response = await docClient.send(command);
-  return response;
+    const params = {
+        TableName: tableNames.devices,
+        Key: {
+            uuid: uuid
+        }
+    };
+    const command = new DeleteCommand(params);
+    const response = await docClient.send(command);
+    return response;
 }
 
 // ========================= Folder =========================
@@ -269,32 +302,46 @@ export const deleteDevice = async (uuid) => {
 // }
 
 export const getFolder = async (userUuid, uuid) => {
-  const params = {
-    TableName: tableNames.folders,
-    Key: {
-      userUuid: userUuid,
-      uuid: uuid
-    }
-  };
-  const command = new GetCommand(params);
-  const response = await docClient.send(command);
-  return response.Item;
+    const params = {
+        TableName: tableNames.folders,
+        Key: {
+            userUuid: userUuid,
+            uuid: uuid
+        }
+    };
+    const command = new GetCommand(params);
+    const response = await docClient.send(command);
+    return response.Item;
+}
+
+export const queryFolders = async (userUuid) => {
+    const params = {
+        TableName: tableNames.folders,
+        KeyConditionExpression: "userUuid = :userUuid",
+        ExpressionAttributeValues: {
+            ":userUuid": userUuid
+        }
+    };
+
+    const command = new QueryCommand(params);
+    const response = await docClient.send(command);
+    return response.Items;
 }
 
 export const updateFolder = async (userUuid, uuid, data) => {
-  const params = {
-    TableName: tableNames.folders,
-    Key: {
-      userUuid: userUuid,
-      uuid: uuid
-    },
-    UpdateExpression: "set " + Object.keys(data).map(key => `${key} = :${key}`).join(", "),
-    ExpressionAttributeValues: data,
-    ReturnValues: ReturnValue.ALL_NEW,
-  };
-  const command = new UpdateCommand(params);
-  const response = await docClient.send(command);
-  return response.Attributes;
+    const params = {
+        TableName: tableNames.folders,
+        Key: {
+            userUuid: userUuid,
+            uuid: uuid
+        },
+        UpdateExpression: "set " + Object.keys(data).map(key => `${key} = :${key}`).join(", "),
+        ExpressionAttributeValues: data,
+        ReturnValues: ReturnValue.ALL_NEW,
+    };
+    const command = new UpdateCommand(params);
+    const response = await docClient.send(command);
+    return response.Attributes;
 }
 
 export const putFolder = async (folder) => {
@@ -302,11 +349,11 @@ export const putFolder = async (folder) => {
     const generatedUuid = uuidv4();
 
     const params = {
-      TableName: tableNames.folders,
-      Item: {
-        uuid: generatedUuid,
-        ...folder
-      },
+        TableName: tableNames.folders,
+        Item: {
+            uuid: generatedUuid,
+            ...folder
+        },
     };
     const command = new PutCommand(params);
     await docClient.send(command);
@@ -314,16 +361,16 @@ export const putFolder = async (folder) => {
 }
 
 export const deleteFolder = async (userUuid, uuid) => {
-  const params = {
-    TableName: tableNames.folders,
-    Key: {
-      userUuid: userUuid,
-      uuid: uuid
-    }
-  };
-  const command = new DeleteCommand(params);
-  const response = await docClient.send(command);
-  return response;
+    const params = {
+        TableName: tableNames.folders,
+        Key: {
+            userUuid: userUuid,
+            uuid: uuid
+        }
+    };
+    const command = new DeleteCommand(params);
+    const response = await docClient.send(command);
+    return response;
 }
 
 // ========================= User =========================
@@ -349,26 +396,63 @@ export const deleteFolder = async (userUuid, uuid) => {
 // }
 
 export const getUser = async (uuid) => {
-  const params = {
-    TableName: tableNames.devices,
-    Key: {
-      uuid: uuid
-    }
-  };
-  const command = new GetCommand(params);
-  const response = await docClient.send(command);
-  return response.Item;
+    const params = {
+        TableName: tableNames.devices,
+        Key: {
+            uuid: uuid
+        }
+    };
+    const command = new GetCommand(params);
+    const response = await docClient.send(command);
+    return response.Item;
+}
+
+export const updateUser = async (uuid, data) => {
+    const params = {
+        TableName: tableNames.devices,
+        Key: {
+            uuid: uuid
+        },
+        UpdateExpression: "set " + Object.keys(data).map(key => `${key} = :${key}`).join(", "),
+        ExpressionAttributeValues: data,
+        ReturnValues: ReturnValue.ALL_NEW,
+    };
+    const command = new UpdateCommand(params);
+    const response = await docClient.send(command);
+    return response.Attributes;
+}
+
+export const scanAllUsers = async () => {
+    const command = new ScanCommand({TableName: tableNames.users});
+    const response = await docClient.send(command);
+    return response.Items;
 }
 
 export const scanUser = async (email) => {
-  const params = {
-    TableName: tableNames.users,
-    FilterExpression: "email = :email",
-    ExpressionAttributeValues: {
-      ":email": email
-    }
-  };
-  const command = new ScanCommand(params);
-  const response = await docClient.send(command);
-  return response.Items;
+    const params = {
+        TableName: tableNames.users,
+        FilterExpression: "email = :email",
+        ExpressionAttributeValues: {
+            ":email": email
+        }
+    };
+    const command = new ScanCommand(params);
+    const response = await docClient.send(command);
+    return response.Items;
+}
+
+export const putUser = async (user) => {
+
+    const generatedUuid = uuidv4();
+
+    const params = {
+        TableName: tableNames.users,
+        Item: {
+            uuid: generatedUuid,
+            ...user
+        },
+    };
+    const command = new PutCommand(params);
+    await docClient.send(command);
+    return generatedUuid;
 }

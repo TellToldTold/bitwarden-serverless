@@ -1,5 +1,5 @@
 import * as utils from './lib/api_utils';
-import { User } from './lib/models';
+import {putUser} from './lib/models';
 import { buildUserDocument } from './lib/bitwarden';
 
 export const handler = async (event, context, callback) => {
@@ -32,17 +32,14 @@ export const handler = async (event, context, callback) => {
   }
 
   try {
-    const existingUser = await User.scan()
-      .where('email').equals(body.email.toLowerCase())
-      .select('COUNT')
-      .execAsync();
+    const existingUser = await scanUser(body.email.toLowerCase());
 
-    if (existingUser.Count > 0) {
+    if (existingUser.length > 0) {
       callback(null, utils.validationError('E-mail already taken'));
       return;
     }
 
-    await User.createAsync(buildUserDocument(body));
+    await putUser(buildUserDocument(body));
 
     callback(null, utils.okResponse(''));
   } catch (e) {

@@ -1,6 +1,6 @@
 import speakeasy from 'speakeasy';
 import qrcode from 'qrcode';
-import { User } from './lib/models';
+import {scanUser, updateUser, User} from './lib/models';
 
 export const setupHandler = async (event, context, callback) => {
   console.log('2FA setup handler triggered', JSON.stringify(event, null, 2));
@@ -12,9 +12,7 @@ export const setupHandler = async (event, context, callback) => {
 
   let user;
   try {
-    [user] = (await User.scan()
-      .where('email').equals(event.email.toLowerCase())
-      .execAsync()).Items;
+    user = await scanUser(event.email.toLowerCase());
   } catch (e) {
     callback(null, 'User not found');
     return;
@@ -23,8 +21,7 @@ export const setupHandler = async (event, context, callback) => {
   try {
     const secret = speakeasy.generateSecret();
 
-    user.set({ totpSecretTemp: secret.base32 });
-    await user.updateAsync();
+    await updateUser(user.uuid, { totpSecretTemp: secret.base32 });
 
     const code = await qrcode.toDataURL(secret.otpauth_url);
 
@@ -49,9 +46,7 @@ export const completeHandler = async (event, context, callback) => {
 
   let user;
   try {
-    [user] = (await User.scan()
-      .where('email').equals(event.email.toLowerCase())
-      .execAsync()).Items;
+    user = await scanUser(event.email.toLowerCase());
   } catch (e) {
     callback(null, 'User not found');
     return;
@@ -59,19 +54,18 @@ export const completeHandler = async (event, context, callback) => {
 
   try {
     const verified = speakeasy.totp.verify({
-      secret: user.get('totpSecretTemp'),
+      secret: user.totpSecretTemp,
       encoding: 'base32',
       token: event.code,
     });
 
     if (verified) {
-      user.set({
+
+      await updateUser(user.uuid, {
         totpSecretTemp: null,
-        totpSecret: user.get('totpSecretTemp'),
+        totpSecret: user.totpSecretTemp,
         securityStamp: undefined,
       });
-
-      await user.updateAsync();
 
       callback(null, 'OK, 2FA setup.');
     } else {

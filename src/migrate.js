@@ -1,5 +1,5 @@
 import omit from 'lodash/omit';
-import { Cipher, User } from './lib/models';
+import { scanAllCiphers, scanAllUsers, updateCipher } from './lib/models';
 import {
   TYPE_LOGIN,
   TYPE_NOTE,
@@ -13,8 +13,8 @@ export const migrateHandler = async (event, context, callback) => {
   let ciphers;
   let users;
   try {
-    ciphers = (await Cipher.scan().execAsync()).Items;
-    users = (await User.scan().execAsync()).Items;
+    ciphers = await scanAllCiphers();
+    users = await scanAllUsers();
   } catch (e) {
     callback(null, 'Server error loading vault items ' + e.message);
     return;
@@ -22,29 +22,27 @@ export const migrateHandler = async (event, context, callback) => {
 
   let userCount = 0;
   users.forEach(async (user) => {
-    const version = user.get('version');
-    console.log('Checking user ' + user.get('uuid') + ' with version ' + version);
+    const version = user.version;
+    console.log('Checking user ' + user.uuid + ' with version ' + version);
     switch (version) {
       case 2:
         console.log('Already up-to-date');
         break;
       case 1:
         userCount += 1;
-        user.set({ kdfIterations: 5000, version: 2 });
-        await user.updateAsync();
+        await updateUser(user.uuid, { kdfIterations: 5000, version: 2 });
         break;
       default:
         userCount += 1;
-        user.set({ emailVerified: true, version: 1 });
-        await user.updateAsync();
+        await updateUser(user.uuid, { emailVerified: true, version: 1 });
         break;
     }
   });
 
   let cipherCount = 0;
   ciphers.forEach(async (cipher) => {
-    const version = cipher.get('version');
-    console.log('Checking cipher ' + cipher.get('uuid') + ' with version ' + version);
+    const version = cipher.version;
+    console.log('Checking cipher ' + cipher.uuid + ' with version ' + version);
     switch (version) {
       case 2:
         // up-to-date
@@ -56,8 +54,7 @@ export const migrateHandler = async (event, context, callback) => {
           version: 2,
           attachments: [],
         };
-        cipher.set(fields);
-        await cipher.updateAsync();
+        await updateCipher(cipher.userUuid, cipher.uuid, fields);
         break;
       }
       default: {
@@ -65,7 +62,7 @@ export const migrateHandler = async (event, context, callback) => {
         const fields = {
           version: 1,
         };
-        const data = cipher.get('data');
+        const data = cipher.data;
 
         if (data) {
           fields.name = data.Name || null;
@@ -79,9 +76,9 @@ export const migrateHandler = async (event, context, callback) => {
             [TYPE_IDENTITY]: 'identity',
           };
 
-          fields[fmap[cipher.get('type')]] = omit(data, ['Name', 'Notes', 'Fields', 'Uri']);
+          fields[fmap[cipher.type]] = omit(data, ['Name', 'Notes', 'Fields', 'Uri']);
 
-          if (cipher.get('type') === TYPE_LOGIN) {
+          if (cipher.type === TYPE_LOGIN) {
             fields.login.Uris = [
               {
                 Uri: data.Uri,
@@ -94,8 +91,7 @@ export const migrateHandler = async (event, context, callback) => {
         fields.data = null;
 
         console.log('Updating with fields', fields);
-        cipher.set(fields);
-        await cipher.updateAsync();
+        await updateCipher(cipher.userUuid, cipher.uuid, fields);
         break;
       }
     }

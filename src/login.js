@@ -3,10 +3,8 @@ import speakeasy from 'speakeasy';
 import * as utils from './lib/api_utils';
 import {
   deleteDevice,
-  getDevice,
-  putDevice,
+  getDevice, getUser, scanDevice,
   scanUser,
-  scanUsers,
   updateDevice
 } from './lib/models';
 import { regenerateTokens, hashesMatch, DEFAULT_VALIDITY } from './lib/bitwarden';
@@ -27,6 +25,7 @@ export const handler = async (event, context, callback) => {
   let user;
 
   try {
+    let params = {};
     switch (body.grant_type) {
       case 'password':
         if ([
@@ -97,7 +96,7 @@ export const handler = async (event, context, callback) => {
         let deviceUuid;
         if (!device) {
           deviceUuid = await updateDevice(body.deviceidentifier, {
-            userUuid: user.get('uuid'),
+            userUuid: user.uuid,
           });
         }
 
@@ -110,15 +109,19 @@ export const handler = async (event, context, callback) => {
         }
 
         if (body.devicename && deviceType) {
-          device.set({
-            // Browser extension sends body, web and mobile send header
+          params = {
+            ...params,
             type: deviceType,
             name: body.devicename,
-          });
+          };
         }
 
         if (body.devicepushtoken) {
-          device.set({ pushToken: body.devicepushtoken });
+          params = {
+            ...params,
+            type: deviceType,
+            pushToken: body.devicepushtoken
+          };
         }
 
         break;
@@ -130,10 +133,7 @@ export const handler = async (event, context, callback) => {
 
         console.log('Login attempt using refresh token', { refreshToken: body.refresh_token });
 
-        [device] = (await Device.scan()
-          .where('refreshToken').equals(body.refresh_token)
-          .execAsync())
-          .Items;
+        device = await scanDevice(body.refresh_token);
 
         if (!device) {
           console.error('Invalid refresh token', { refreshToken: body.refresh_token });
@@ -141,7 +141,7 @@ export const handler = async (event, context, callback) => {
           return;
         }
 
-        user = await User.getAsync(device.get('userUuid'));
+        user = await getUser(device.userUuid);
         break;
       default:
         callback(null, utils.validationError('Unsupported grant type'));
@@ -150,20 +150,21 @@ export const handler = async (event, context, callback) => {
 
     const tokens = regenerateTokens(user, device);
 
-    device.set({ refreshToken: tokens.refreshToken });
+    params = {...params, refreshToken: tokens.refreshToken };
 
-    device = await device.updateAsync();
-    const privateKey = user.get('privateKey') || null;
+    await updateDevice(device.uuid, params);
+
+    const privateKey = user.privateKey || null;
 
     callback(null, utils.okResponse({
       access_token: tokens.accessToken,
       expires_in: DEFAULT_VALIDITY,
       token_type: 'Bearer',
       refresh_token: tokens.refreshToken,
-      Key: user.get('key'),
+      Key: user.key,
       PrivateKey: privateKey ? privateKey.toString('utf8') : null,
       Kdf: KDF_PBKDF2,
-      KdfIterations: user.get('kdfIterations') || KDF_PBKDF2_ITERATIONS_DEFAULT,
+      KdfIterations: user.kdfIterations || KDF_PBKDF2_ITERATIONS_DEFAULT,
       ResetMasterPassword: false, // TODO: according to official server https://github.com/bitwarden/server/blob/01d4d97ef18637fa857195a7285fda092124a677/src/Core/IdentityServer/BaseRequestValidator.cs#L164
     }));
   } catch (e) {
